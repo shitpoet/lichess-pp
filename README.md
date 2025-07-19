@@ -8,6 +8,10 @@ position versus computer.
 
 Works with Lichess Web interface (2025).
 
+The engine is lously callibrated and plays at the level about equal to your current puzzle rating.
+
+The engine used is lozza.js v2.5 (max ELO ~ 2000-2500).
+
 Also the script changes GUI a bit to make it look more like new official Android client.
 
 If you don't like it you can comment `appendChild` command, which adds all the styling.
