@@ -12,9 +12,12 @@ The engine is lously callibrated and plays at the level about equal to your curr
 
 The engine used is lozza.js v2.5 (max ELO ~ 2000-2500).
 
-Also the script changes GUI a bit to make it look more like new official Android client.
+Extra features:
 
-If you don't like it you can comment `appendChild` command, which adds all the styling.
+* The script changes GUI a bit to make it look more like new official Android client. If you don't like it you can comment `appendChild` command, which adds all the styling.
+* Click on your rating to show current evalution of the position
+* Evaluation of the position of the puzzle end is automatically shown
+* Automatically move to the next puzzle if the puzzle ends with checkmate
 
 
 ## TamperMonkey notes:

@@ -9403,10 +9403,10 @@
 
   //}}}
 
-  var lozza         = new lozChess()
-  lozza.board.lozza = lozza;
-
   //{{{  node interface
+
+  var lozza = new lozChess()
+  lozza.board.lozza = lozza;
 
   if (lozzaHost == HOST_NODEJS) {
 
@@ -9434,10 +9434,8 @@
 
   //}}}
 
-
     return function (data) {
       lozzaHost = HOST_WEB   // make Lozza call postMessage
-      //onmessage({data})
       onmessage({data})
     }
   }
@@ -9670,6 +9668,23 @@
         font-size: 2em;
       }
 
+      .puzzle__side__metas {
+        display: none;
+      }
+
+      .puzzle__session a:nth-last-child(n + 31) {
+        display: none;
+      }
+
+      .puzzle__side__theme > p,
+      .puzzle__side__theme > div {
+        display: none;
+      }
+
+      .puzzle__side__theme h2 {
+        margin-bottom: 0;
+      }
+
     `
     document.body.appendChild(styleEl)
 
@@ -9751,7 +9766,6 @@
       return qs('.cg-wrap.orientation-white') ? true : false
     }
 
-    //todo: check that the current move is the last in the thread
     function isAiToMove() {
       let game = parseGame()
       if (isHumanWhite()) {
@@ -9869,13 +9883,147 @@
       }, 100)
     }
 
-    let send = Lozza(receive)
+    let cevalStatus = 'idle'
+    let cevalFen = ''
+    let cevalText = ''
+
+    function showCeval(ceval) {
+      let el = qs('.puzzle__side__user #__lpp_ceval')
+      if (!el) {
+        el = document.createElement('div')
+        el.id = '__lpp_ceval'
+        el.style.fontSize = '2em'
+        el.style.fontWeight = 'bold'
+        el.style.flex = '1 0 0px'
+        el.style.textAlign = 'right'
+        qs('.puzzle__side__user').appendChild(el)
+      }
+      el.innerHTML = ceval
+    }
+
+    function hideCeval() {
+      let el = qs('.puzzle__side__user #__lpp_ceval')
+      if (el) el.remove()
+    }
+
+    function receive2(message) {  // message: string
+      log('receive2', message)
+      message = message.trim();
+      message = message.replace(/\s+/g, ' ')
+      let tokens = message.split(' ')
+      if (tokens[0] == 'bestmove') {
+        cevalStatus = 'idle'
+      } else if (tokens[0] == 'info') {
+        for (let i = 0; i < tokens.length; i++) {
+          if (tokens[i] == 'score') {
+            if (tokens[i + 1] == 'mate') {
+              showCeval('#' + tokens[i + 2])
+            } else {
+              let cp = Number(tokens[i + 2])
+              let game = new Chess(cevalFen)
+              //log('cp side', isHumanWhite(), game.turn())
+              //let humanTurn = isHumanWhite() ? 'w' : 'b'
+              if (game.turn() == 'b') cp = -cp
+              let s = (cp / 100).toFixed(2)
+              if (!s.startsWith('-') && Number(s) != 0) {
+                s = '+' + s
+              }
+              cevalText = s
+              showCeval(s)
+            }
+            break
+          }
+        }
+      }
+    }
+
+    function calcAndShowCeval() {
+      let game = parseGame()
+      let fen = game.fen()
+      if (game.game_over()) {
+        log('calcAndShowCeval game over')
+        cevalStatus = 'idle'
+        cevalFen = fen
+        if (game.in_draw()) {
+          cevalText = '½:½'
+        } else if (game.turn() == 'b') {
+          cevalText = '1:0'
+        } else {
+          cevalText = '0:1'
+        }
+        showCeval(cevalText)
+        return;
+      }
+      log('cevalStatus', cevalStatus, fen != cevalFen)
+      if (cevalStatus == 'idle') {
+        if (fen != cevalFen) {
+          cevalStatus = 'calculating'
+          cevalFen = fen
+          setTimeout(function() {
+            send2('position fen ' + fen)
+            //engine.postMessage('go depth 1')
+            //engine.postMessage('go movetime 200'); // ms
+            //let elo = Number(qs('.puzzle__side__user__rating strong').childNodes[0].nodeValue)
+            let elo = 2500
+            const nodes = eloToNodes(elo)
+            //const randomizedNodes = randomizeNodes(nodes)
+            console.log('[engine 2] go nodes ' + nodes, '(elo ~' + elo + ')')
+            send2('go nodes ' + String(nodes))
+          }, 50)
+        } else {
+          showCeval(cevalText)
+        }
+      }
+    }
+
+    let send = Lozza(receive)  // playing engine
     send('uci')
     send('ucinewgame')
     send('debug off')
+    let send2 = Lozza(receive2)  // eval engine
+    send2('uci')
+    send2('ucinewgame')
+    send2('debug off')
 
     function isPuzzleFinished() {
       return qs('.puzzle__feedback.after') ? true : false
+    }
+
+    function atPuzzleEnd() {
+      return qs('.puzzle__moves').querySelector('move.active.win') !== null
+    }
+
+    function atCheckmatePuzzleEnd() {
+      if (atPuzzleEnd()) {
+        return parseGame().game_over()
+      } else {
+        return false
+      }
+    }
+
+    function uiTick() {
+      let puzzleFinished = isPuzzleFinished()
+      let el = qs('button.board-menu-toggle')
+      if (el) {
+        el.style.opacity = puzzleFinished ? '1' : '0.5'
+      }
+
+      if (puzzleFinished) {
+        // if current move is the last move of the puzzle
+        // and it is a checkmate - go to the next puzzle auto-ly
+        if (atCheckmatePuzzleEnd()) {
+          setTimeout(function() {
+            // re-check just in case
+            if (atCheckmatePuzzleEnd()) {
+              qs('.puzzle__vote__buttons .vote-up').click()
+            }
+          }, 777)
+        }
+      }
+
+      if (parseGame().fen() != cevalFen) {
+        hideCeval()
+      }
     }
 
     function aiTick() {
@@ -9887,10 +10035,8 @@
           return;
         }
         makeAiMove(game.fen())
-      }
-      let el = qs('button.board-menu-toggle')
-      if (el) {
-        el.style.opacity = puzzleFinished ? '1' : '0.5'
+      } else if (!playing && puzzleFinished && atPuzzleEnd()) {
+        calcAndShowCeval()
       }
     }
 
@@ -9951,14 +10097,30 @@
 
     function handleScroll(ev) {
       //log('scroll')
-      let path = ev.composedPath()
-      if (path) {
-        //log(path)
-        if (path.some(el => el.tagName == 'CG-BOARD')) {
-          //log('block scroll')
-          ev.stopPropagation()
-          ev.preventDefault()
+      let haveGhostPiece = false
+      let boardAreaScroll = false
+      if (qs('piece.ghost')) {
+        haveGhostPiece = (qs('piece.ghost').style.visibility == 'visible')
+      }
+      if (!haveGhostPiece) {
+        let path = ev.composedPath()
+        if (path) {
+          //log(path)
+          if (
+            path.some(el => (
+              el.tagName == 'CG-BOARD' ||
+              el.tagName == 'DIV' &&
+              el.classList.contains('puzzle__controls')
+            ))
+          ) {
+            boardAreaScroll = true
+          }
         }
+      }
+      if (haveGhostPiece || boardAreaScroll) {
+        log('block scroll')
+        ev.stopPropagation()
+        ev.preventDefault()
       }
     }
 
@@ -9967,7 +10129,12 @@
     //window.addEventListener('mouseup', handleClick)
     window.addEventListener('touchend', handleClick, true)
 
+    setInterval(uiTick, 333)
     setInterval(aiTick, 1000)
+
+    qs('.puzzle__side__user__rating').addEventListener('click', function() {
+      calcAndShowCeval()
+    })
 
     waitForEl(document, 'button.board-menu-toggle', function() {
       log('disable button.board-menu-toggle')
